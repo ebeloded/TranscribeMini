@@ -8,11 +8,15 @@ let package = Package(
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "TranscribeMini", targets: ["TranscribeMini"])
+        .executable(name: "TranscribeMini", targets: ["TranscribeMini"]),
+        .executable(name: "TranscribeBench", targets: ["TranscribeBench"])
     ],
     targets: [
         .executableTarget(
             name: "TranscribeMini"
+        ),
+        .executableTarget(
+            name: "TranscribeBench"
         ),
         .testTarget(
             name: "TranscribeMiniTests",

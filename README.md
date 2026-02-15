@@ -3,8 +3,8 @@
 A minimal macOS hold-to-talk transcription app.
 
 Interaction:
-- Hold `Option + Shift + D`: recording starts immediately.
-- Release `Option + Shift + D`: recording stops, audio is transcribed, text is pasted at your cursor.
+- Hold `Fn`: recording starts immediately.
+- Release `Fn`: recording stops, audio is transcribed, text is pasted at your cursor.
 
 ## Run
 
@@ -99,22 +99,34 @@ Optional file: `~/.transcribe-mini.json`.
 ```bash
 brew install whisper-cpp
 mkdir -p "$HOME/.transcribe-mini/models"
-curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin \
-  -o "$HOME/.transcribe-mini/models/ggml-tiny.en.bin"
+curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin \
+  -o "$HOME/.transcribe-mini/models/ggml-base.en.bin"
 
 export TRANSCRIBE_PROVIDER="whispercpp"
-export TRANSCRIBE_LOCAL_MODEL="$HOME/.transcribe-mini/models/ggml-tiny.en.bin"
+export TRANSCRIBE_LOCAL_MODEL="$HOME/.transcribe-mini/models/ggml-base.en.bin"
 export TRANSCRIBE_LANGUAGE="en"
 export TRANSCRIBE_USE_WHISPER_SERVER="true"
 swift run
 ```
 
 Default local behavior uses persistent `whisper-server` for faster repeated utterances.
+First request after app launch can still be slower while the model is loaded into memory.
 Fallback to one-shot CLI mode:
 
 ```bash
 export TRANSCRIBE_USE_WHISPER_SERVER="false"
 ```
+
+The `base.en` model offers the best speed/quality tradeoff (~0.2s inference for 10s audio with proper casing). For higher quality at the cost of speed:
+
+```bash
+curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin \
+  -o "$HOME/.transcribe-mini/models/ggml-large-v3-turbo-q5_0.bin"
+
+export TRANSCRIBE_LOCAL_MODEL="$HOME/.transcribe-mini/models/ggml-large-v3-turbo-q5_0.bin"
+```
+
+Run `swift run TranscribeBench` to compare transcription speed across providers and models.
 
 Quick local smoke test (without launching the app):
 
@@ -143,7 +155,8 @@ Optional override:
 
 - Menubar icon states:
   - Waveform: idle
-  - Red waveform: recording/transcribing
+  - Red filled waveform: recording
+  - Red waveform with magnifier: transcribing
   - Orange warning triangle: last action failed
-- Default hotkey is hardcoded to `Option + Shift + D`.
+- Default hold key is hardcoded to `Fn`.
 - Audio is recorded as `.wav` to support local whisper.cpp directly.
