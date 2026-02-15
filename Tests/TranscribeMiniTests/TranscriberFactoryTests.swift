@@ -9,7 +9,12 @@ final class TranscriberFactoryTests: XCTestCase {
             model: "gpt-4o-mini-transcribe",
             endpoint: nil,
             language: "en-US",
-            whisperCLIPath: nil
+            whisperCLIPath: nil,
+            whisperServerPath: nil,
+            whisperServerHost: "127.0.0.1",
+            whisperServerPort: 8178,
+            whisperServerInferencePath: "/inference",
+            useWhisperServer: true
         )
 
         let transcriber = TranscriberFactory.make(config: config)
@@ -23,7 +28,12 @@ final class TranscriberFactoryTests: XCTestCase {
             model: "gpt-4o-mini-transcribe",
             endpoint: nil,
             language: "en",
-            whisperCLIPath: nil
+            whisperCLIPath: nil,
+            whisperServerPath: nil,
+            whisperServerHost: "127.0.0.1",
+            whisperServerPort: 8178,
+            whisperServerInferencePath: "/inference",
+            useWhisperServer: true
         )
 
         let transcriber = TranscriberFactory.make(config: config)
@@ -37,10 +47,34 @@ final class TranscriberFactoryTests: XCTestCase {
             model: "/tmp/model.bin",
             endpoint: nil,
             language: "en",
-            whisperCLIPath: "/opt/homebrew/bin/whisper-cli"
+            whisperCLIPath: "/opt/homebrew/bin/whisper-cli",
+            whisperServerPath: "/opt/homebrew/bin/whisper-server",
+            whisperServerHost: "127.0.0.1",
+            whisperServerPort: 8178,
+            whisperServerInferencePath: "/inference",
+            useWhisperServer: false
         )
 
         let transcriber = TranscriberFactory.make(config: config)
         XCTAssertTrue(type(of: transcriber) == WhisperCPPTranscriber.self)
+    }
+
+    func testFactoryCreatesWhisperServerTranscriberByDefault() {
+        let config = AppConfig(
+            provider: .whispercpp,
+            apiKey: "",
+            model: "/tmp/model.bin",
+            endpoint: nil,
+            language: "en",
+            whisperCLIPath: "/opt/homebrew/bin/whisper-cli",
+            whisperServerPath: "/opt/homebrew/bin/whisper-server",
+            whisperServerHost: "127.0.0.1",
+            whisperServerPort: 8178,
+            whisperServerInferencePath: "/inference",
+            useWhisperServer: true
+        )
+
+        let transcriber = TranscriberFactory.make(config: config)
+        XCTAssertTrue(type(of: transcriber) == WhisperServerTranscriber.self)
     }
 }

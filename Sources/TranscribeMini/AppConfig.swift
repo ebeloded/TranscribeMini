@@ -25,6 +25,11 @@ struct AppConfig: Decodable {
     var endpoint: String?
     var language: String?
     var whisperCLIPath: String?
+    var whisperServerPath: String?
+    var whisperServerHost: String
+    var whisperServerPort: Int
+    var whisperServerInferencePath: String
+    var useWhisperServer: Bool
 
     static func load(
         from configURL: URL? = nil,
@@ -39,7 +44,12 @@ struct AppConfig: Decodable {
             model: "gpt-4o-mini-transcribe",
             endpoint: nil,
             language: "en-US",
-            whisperCLIPath: nil
+            whisperCLIPath: nil,
+            whisperServerPath: nil,
+            whisperServerHost: "127.0.0.1",
+            whisperServerPort: 8178,
+            whisperServerInferencePath: "/inference",
+            useWhisperServer: true
         )
 
         if let data = try? Data(contentsOf: url),
@@ -62,6 +72,22 @@ struct AppConfig: Decodable {
             if let whisperCLIPath = fileConfig.whisperCLIPath {
                 merged.whisperCLIPath = whisperCLIPath
             }
+            if let whisperServerPath = fileConfig.whisperServerPath {
+                merged.whisperServerPath = whisperServerPath
+            }
+            if let whisperServerHost = fileConfig.whisperServerHost, !whisperServerHost.isEmpty {
+                merged.whisperServerHost = whisperServerHost
+            }
+            if let whisperServerPort = fileConfig.whisperServerPort {
+                merged.whisperServerPort = whisperServerPort
+            }
+            if let whisperServerInferencePath = fileConfig.whisperServerInferencePath,
+               !whisperServerInferencePath.isEmpty {
+                merged.whisperServerInferencePath = whisperServerInferencePath
+            }
+            if let useWhisperServer = fileConfig.useWhisperServer {
+                merged.useWhisperServer = useWhisperServer
+            }
         }
 
         if let providerValue = env["TRANSCRIBE_PROVIDER"]?.lowercased(),
@@ -80,6 +106,21 @@ struct AppConfig: Decodable {
         }
         if let whisperCLIPath = env["WHISPER_CLI_PATH"], !whisperCLIPath.isEmpty {
             merged.whisperCLIPath = whisperCLIPath
+        }
+        if let whisperServerPath = env["WHISPER_SERVER_PATH"], !whisperServerPath.isEmpty {
+            merged.whisperServerPath = whisperServerPath
+        }
+        if let whisperServerHost = env["WHISPER_SERVER_HOST"], !whisperServerHost.isEmpty {
+            merged.whisperServerHost = whisperServerHost
+        }
+        if let whisperServerPort = env["WHISPER_SERVER_PORT"], let value = Int(whisperServerPort) {
+            merged.whisperServerPort = value
+        }
+        if let whisperServerInferencePath = env["WHISPER_SERVER_INFERENCE_PATH"], !whisperServerInferencePath.isEmpty {
+            merged.whisperServerInferencePath = whisperServerInferencePath
+        }
+        if let useWhisperServer = env["TRANSCRIBE_USE_WHISPER_SERVER"]?.lowercased() {
+            merged.useWhisperServer = ["1", "true", "yes", "on"].contains(useWhisperServer)
         }
         if let localModelPath = env["TRANSCRIBE_LOCAL_MODEL"], !localModelPath.isEmpty {
             merged.model = localModelPath
@@ -103,4 +144,9 @@ private struct FileConfig: Decodable {
     let endpoint: String?
     let language: String?
     let whisperCLIPath: String?
+    let whisperServerPath: String?
+    let whisperServerHost: String?
+    let whisperServerPort: Int?
+    let whisperServerInferencePath: String?
+    let useWhisperServer: Bool?
 }

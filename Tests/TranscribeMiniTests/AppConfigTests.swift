@@ -13,6 +13,11 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(config.model, "gpt-4o-mini-transcribe")
         XCTAssertEqual(config.language, "en-US")
         XCTAssertNil(config.whisperCLIPath)
+        XCTAssertNil(config.whisperServerPath)
+        XCTAssertEqual(config.whisperServerHost, "127.0.0.1")
+        XCTAssertEqual(config.whisperServerPort, 8178)
+        XCTAssertEqual(config.whisperServerInferencePath, "/inference")
+        XCTAssertTrue(config.useWhisperServer)
     }
 
     func testLoadFromFileAndEnvOverride() throws {
@@ -37,7 +42,12 @@ final class AppConfigTests: XCTestCase {
             "OPENAI_API_KEY": "env-openai-key",
             "TRANSCRIBE_MODEL": "env-model",
             "TRANSCRIBE_LANGUAGE": "en",
-            "WHISPER_CLI_PATH": "/opt/homebrew/bin/whisper-cli"
+            "WHISPER_CLI_PATH": "/opt/homebrew/bin/whisper-cli",
+            "WHISPER_SERVER_PATH": "/opt/homebrew/bin/whisper-server",
+            "WHISPER_SERVER_HOST": "localhost",
+            "WHISPER_SERVER_PORT": "9000",
+            "WHISPER_SERVER_INFERENCE_PATH": "inference2",
+            "TRANSCRIBE_USE_WHISPER_SERVER": "false"
         ]
 
         let config = AppConfig.load(from: configURL, env: env)
@@ -47,6 +57,11 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(config.model, "env-model")
         XCTAssertEqual(config.language, "en")
         XCTAssertEqual(config.whisperCLIPath, "/opt/homebrew/bin/whisper-cli")
+        XCTAssertEqual(config.whisperServerPath, "/opt/homebrew/bin/whisper-server")
+        XCTAssertEqual(config.whisperServerHost, "localhost")
+        XCTAssertEqual(config.whisperServerPort, 9000)
+        XCTAssertEqual(config.whisperServerInferencePath, "inference2")
+        XCTAssertFalse(config.useWhisperServer)
     }
 
     func testLocalModelEnvOverridesModel() {

@@ -7,11 +7,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let recorder = HoldToTalkRecorder()
     private var hotkeyManager: HotkeyManager?
+    private let config: AppConfig
     private var transcriber: any Transcriber
     private var isRecording = false
 
     override init() {
         let config = AppConfig.load()
+        self.config = config
         self.transcriber = TranscriberFactory.make(config: config)
         super.init()
     }
@@ -23,7 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func configureMenuBar() {
-        statusItem.button?.title = "T"
+        setStatusIcon(.idle)
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Hold Option+Shift+D to Talk", action: nil, keyEquivalent: ""))
@@ -54,16 +56,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try recorder.start()
             isRecording = true
-            statusItem.button?.title = "R"
+            setStatusIcon(.recording)
         } catch {
-            statusItem.button?.title = "!"
+            setStatusIcon(.error)
         }
     }
 
     private func stopHoldToTalk() {
         guard isRecording else { return }
         isRecording = false
-        statusItem.button?.title = "T"
+        setStatusIcon(.idle)
 
         guard let audioURL = recorder.stop() else { return }
         Task { @MainActor in
@@ -71,12 +73,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let text = try await transcriber.transcribe(audioURL: audioURL)
                 TextInjector.paste(text: text)
             } catch {
-                statusItem.button?.title = "!"
+                setStatusIcon(.error)
             }
         }
     }
 
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if config.provider == .whispercpp, config.useWhisperServer {
+            Task {
+                await WhisperServerManager.shared.stop()
+            }
+        }
+    }
+
+    private enum IconState {
+        case idle
+        case recording
+        case error
+    }
+
+    private func setStatusIcon(_ state: IconState) {
+        guard let button = statusItem.button else { return }
+
+        let symbolName: String
+        switch state {
+        case .idle:
+            symbolName = "waveform"
+        case .recording:
+            symbolName = "waveform.circle.fill"
+        case .error:
+            symbolName = "exclamationmark.triangle.fill"
+        }
+
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TranscribeMini")
+        image?.isTemplate = false
+        button.image = image
+        button.title = ""
+
+        switch state {
+        case .idle:
+            button.contentTintColor = .labelColor
+        case .recording:
+            button.contentTintColor = .systemRed
+        case .error:
+            button.contentTintColor = .systemOrange
+        }
     }
 }

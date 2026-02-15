@@ -20,11 +20,25 @@ enum TranscriberFactory {
                 language: config.language
             )
         case .whispercpp:
-            return WhisperCPPTranscriber(
-                cliPath: config.whisperCLIPath ?? "/opt/homebrew/bin/whisper-cli",
-                modelPath: config.model,
-                language: config.language ?? "en"
-            )
+            if config.useWhisperServer {
+                let host = config.whisperServerHost
+                let port = config.whisperServerPort
+                let path = normalizedServerPath(config.whisperServerInferencePath)
+                let endpoint = "http://\(host):\(port)\(path)"
+
+                return WhisperServerTranscriber(
+                    endpoint: endpoint,
+                    serverPath: config.whisperServerPath ?? "/opt/homebrew/bin/whisper-server",
+                    modelPath: config.model,
+                    language: config.language ?? "en"
+                )
+            } else {
+                return WhisperCPPTranscriber(
+                    cliPath: config.whisperCLIPath ?? "/opt/homebrew/bin/whisper-cli",
+                    modelPath: config.model,
+                    language: config.language ?? "en"
+                )
+            }
         }
     }
 }
@@ -173,6 +187,67 @@ final class WhisperCPPTranscriber: Transcriber {
     }
 }
 
+final class WhisperServerTranscriber: Transcriber {
+    private let endpoint: String
+    private let serverPath: String
+    private let modelPath: String
+    private let language: String
+    private let manager: WhisperServerManager
+
+    init(
+        endpoint: String,
+        serverPath: String,
+        modelPath: String,
+        language: String,
+        manager: WhisperServerManager = .shared
+    ) {
+        self.endpoint = endpoint
+        self.serverPath = serverPath
+        self.modelPath = modelPath
+        self.language = language
+        self.manager = manager
+    }
+
+    func transcribe(audioURL: URL) async throws -> String {
+        guard let url = URL(string: endpoint), let host = url.host, let port = url.port else {
+            throw NSError(domain: "WhisperServerTranscriber", code: 30, userInfo: [
+                NSLocalizedDescriptionKey: "Invalid whisper-server endpoint"
+            ])
+        }
+
+        try await manager.ensureRunning(
+            serverPath: serverPath,
+            modelPath: modelPath,
+            host: host,
+            port: port
+        )
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        let audioData = try Data(contentsOf: audioURL)
+        let mimeType = mimeTypeForAudioFile(url: audioURL)
+        let body = MultipartFormBuilder.makeWhisperServerBody(
+            boundary: boundary,
+            language: language,
+            filename: audioURL.lastPathComponent,
+            audioData: audioData,
+            mimeType: mimeType
+        )
+
+        let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+        guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "Whisper server transcription failed"
+            throw NSError(domain: "WhisperServerTranscriber", code: 31, userInfo: [NSLocalizedDescriptionKey: message])
+        }
+
+        let decoded = try JSONDecoder().decode(OpenAITranscriptionResponse.self, from: data)
+        return decoded.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 private struct OpenAITranscriptionResponse: Decodable {
     let text: String
 }
@@ -201,6 +276,32 @@ enum MultipartFormBuilder {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         return body
     }
+
+    static func makeWhisperServerBody(
+        boundary: String,
+        language: String,
+        filename: String,
+        audioData: Data,
+        mimeType: String
+    ) -> Data {
+        var body = Data()
+        body.appendMultipartField(name: "language", value: language, boundary: boundary)
+        body.appendMultipartField(name: "response_format", value: "json", boundary: boundary)
+        body.appendMultipartField(name: "temperature", value: "0.0", boundary: boundary)
+        body.appendMultipartFile(
+            name: "file",
+            filename: filename,
+            mimeType: mimeType,
+            data: audioData,
+            boundary: boundary
+        )
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        return body
+    }
+}
+
+private func normalizedServerPath(_ path: String) -> String {
+    path.hasPrefix("/") ? path : "/\(path)"
 }
 
 private func mimeTypeForAudioFile(url: URL) -> String {

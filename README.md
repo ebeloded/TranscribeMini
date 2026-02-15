@@ -53,6 +53,11 @@ Supported environment variables:
 - `TRANSCRIBE_LANGUAGE`
 - `TRANSCRIBE_LOCAL_MODEL` (path to local whisper.cpp model; overrides `TRANSCRIBE_MODEL`)
 - `WHISPER_CLI_PATH` (default: `/opt/homebrew/bin/whisper-cli`)
+- `TRANSCRIBE_USE_WHISPER_SERVER` (`true`/`false`, default: `true`)
+- `WHISPER_SERVER_PATH` (default: `/opt/homebrew/bin/whisper-server`)
+- `WHISPER_SERVER_HOST` (default: `127.0.0.1`)
+- `WHISPER_SERVER_PORT` (default: `8178`)
+- `WHISPER_SERVER_INFERENCE_PATH` (default: `/inference`)
 
 Optional file: `~/.transcribe-mini.json`.
 
@@ -100,7 +105,15 @@ curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.b
 export TRANSCRIBE_PROVIDER="whispercpp"
 export TRANSCRIBE_LOCAL_MODEL="$HOME/.transcribe-mini/models/ggml-tiny.en.bin"
 export TRANSCRIBE_LANGUAGE="en"
+export TRANSCRIBE_USE_WHISPER_SERVER="true"
 swift run
+```
+
+Default local behavior uses persistent `whisper-server` for faster repeated utterances.
+Fallback to one-shot CLI mode:
+
+```bash
+export TRANSCRIBE_USE_WHISPER_SERVER="false"
 ```
 
 Quick local smoke test (without launching the app):
@@ -129,8 +142,8 @@ Optional override:
 ## Notes
 
 - Menubar icon states:
-  - `T`: idle
-  - `R`: recording
-  - `!`: last action failed
+  - Waveform: idle
+  - Red waveform: recording/transcribing
+  - Orange warning triangle: last action failed
 - Default hotkey is hardcoded to `Option + Shift + D`.
 - Audio is recorded as `.wav` to support local whisper.cpp directly.
