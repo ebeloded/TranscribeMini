@@ -53,6 +53,8 @@ Supported environment variables:
 - `TRANSCRIBE_LANGUAGE`
 - `TRANSCRIBE_LOCAL_MODEL` (path to local whisper.cpp model; overrides `TRANSCRIBE_MODEL`)
 - `WHISPER_CLI_PATH` (default: `/opt/homebrew/bin/whisper-cli`)
+- `WHISPER_STREAM_PATH` (default: `/opt/homebrew/bin/whisper-stream`)
+- `TRANSCRIBE_STREAMING` (`true`/`false`, default: `true`)
 
 Optional file: `~/.transcribe-mini.json`.
 
@@ -100,8 +102,14 @@ curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.b
 export TRANSCRIBE_PROVIDER="whispercpp"
 export TRANSCRIBE_LOCAL_MODEL="$HOME/.transcribe-mini/models/ggml-tiny.en.bin"
 export TRANSCRIBE_LANGUAGE="en"
+export TRANSCRIBE_STREAMING="true"
 swift run
 ```
+
+Streaming behavior in `whispercpp` mode:
+- Hold `Option + Shift + D`: starts `whisper-stream` immediately.
+- Release `Option + Shift + D`: stops stream and pastes captured text.
+- While holding, the latest partial text is shown as menu bar tooltip.
 
 Quick local smoke test (without launching the app):
 
