@@ -9,9 +9,7 @@ final class TranscriberFactoryTests: XCTestCase {
             model: "gpt-4o-mini-transcribe",
             endpoint: nil,
             language: "en-US",
-            whisperCLIPath: nil,
-            whisperStreamPath: nil,
-            enableStreaming: true
+            whisperCLIPath: nil
         )
 
         let transcriber = TranscriberFactory.make(config: config)
@@ -25,9 +23,7 @@ final class TranscriberFactoryTests: XCTestCase {
             model: "gpt-4o-mini-transcribe",
             endpoint: nil,
             language: "en",
-            whisperCLIPath: nil,
-            whisperStreamPath: nil,
-            enableStreaming: true
+            whisperCLIPath: nil
         )
 
         let transcriber = TranscriberFactory.make(config: config)
@@ -41,9 +37,7 @@ final class TranscriberFactoryTests: XCTestCase {
             model: "/tmp/model.bin",
             endpoint: nil,
             language: "en",
-            whisperCLIPath: "/opt/homebrew/bin/whisper-cli",
-            whisperStreamPath: "/opt/homebrew/bin/whisper-stream",
-            enableStreaming: true
+            whisperCLIPath: "/opt/homebrew/bin/whisper-cli"
         )
 
         let transcriber = TranscriberFactory.make(config: config)

@@ -13,8 +13,6 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(config.model, "gpt-4o-mini-transcribe")
         XCTAssertEqual(config.language, "en-US")
         XCTAssertNil(config.whisperCLIPath)
-        XCTAssertNil(config.whisperStreamPath)
-        XCTAssertTrue(config.enableStreaming)
     }
 
     func testLoadFromFileAndEnvOverride() throws {
@@ -39,9 +37,7 @@ final class AppConfigTests: XCTestCase {
             "OPENAI_API_KEY": "env-openai-key",
             "TRANSCRIBE_MODEL": "env-model",
             "TRANSCRIBE_LANGUAGE": "en",
-            "WHISPER_CLI_PATH": "/opt/homebrew/bin/whisper-cli",
-            "WHISPER_STREAM_PATH": "/opt/homebrew/bin/whisper-stream",
-            "TRANSCRIBE_STREAMING": "false"
+            "WHISPER_CLI_PATH": "/opt/homebrew/bin/whisper-cli"
         ]
 
         let config = AppConfig.load(from: configURL, env: env)
@@ -51,8 +47,6 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(config.model, "env-model")
         XCTAssertEqual(config.language, "en")
         XCTAssertEqual(config.whisperCLIPath, "/opt/homebrew/bin/whisper-cli")
-        XCTAssertEqual(config.whisperStreamPath, "/opt/homebrew/bin/whisper-stream")
-        XCTAssertFalse(config.enableStreaming)
     }
 
     func testLocalModelEnvOverridesModel() {

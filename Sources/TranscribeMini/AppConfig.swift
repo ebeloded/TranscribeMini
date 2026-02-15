@@ -25,8 +25,6 @@ struct AppConfig: Decodable {
     var endpoint: String?
     var language: String?
     var whisperCLIPath: String?
-    var whisperStreamPath: String?
-    var enableStreaming: Bool
 
     static func load(
         from configURL: URL? = nil,
@@ -41,9 +39,7 @@ struct AppConfig: Decodable {
             model: "gpt-4o-mini-transcribe",
             endpoint: nil,
             language: "en-US",
-            whisperCLIPath: nil,
-            whisperStreamPath: nil,
-            enableStreaming: true
+            whisperCLIPath: nil
         )
 
         if let data = try? Data(contentsOf: url),
@@ -66,12 +62,6 @@ struct AppConfig: Decodable {
             if let whisperCLIPath = fileConfig.whisperCLIPath {
                 merged.whisperCLIPath = whisperCLIPath
             }
-            if let whisperStreamPath = fileConfig.whisperStreamPath {
-                merged.whisperStreamPath = whisperStreamPath
-            }
-            if let enableStreaming = fileConfig.enableStreaming {
-                merged.enableStreaming = enableStreaming
-            }
         }
 
         if let providerValue = env["TRANSCRIBE_PROVIDER"]?.lowercased(),
@@ -91,14 +81,8 @@ struct AppConfig: Decodable {
         if let whisperCLIPath = env["WHISPER_CLI_PATH"], !whisperCLIPath.isEmpty {
             merged.whisperCLIPath = whisperCLIPath
         }
-        if let whisperStreamPath = env["WHISPER_STREAM_PATH"], !whisperStreamPath.isEmpty {
-            merged.whisperStreamPath = whisperStreamPath
-        }
         if let localModelPath = env["TRANSCRIBE_LOCAL_MODEL"], !localModelPath.isEmpty {
             merged.model = localModelPath
-        }
-        if let streamingValue = env["TRANSCRIBE_STREAMING"]?.lowercased() {
-            merged.enableStreaming = ["1", "true", "yes", "on"].contains(streamingValue)
         }
 
         let envAPIKey = env["TRANSCRIBE_API_KEY"]
@@ -119,6 +103,4 @@ private struct FileConfig: Decodable {
     let endpoint: String?
     let language: String?
     let whisperCLIPath: String?
-    let whisperStreamPath: String?
-    let enableStreaming: Bool?
 }

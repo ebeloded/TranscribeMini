@@ -7,14 +7,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let recorder = HoldToTalkRecorder()
     private var hotkeyManager: HotkeyManager?
-    private var streamSession: WhisperStreamSession?
-    private let config: AppConfig
     private var transcriber: any Transcriber
     private var isRecording = false
 
     override init() {
         let config = AppConfig.load()
-        self.config = config
         self.transcriber = TranscriberFactory.make(config: config)
         super.init()
     }
@@ -54,12 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startHoldToTalk() {
         guard !isRecording else { return }
-
-        if config.provider == .whispercpp, config.enableStreaming {
-            startStreamingHoldToTalk()
-            return
-        }
-
         do {
             try recorder.start()
             isRecording = true
@@ -72,12 +63,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopHoldToTalk() {
         guard isRecording else { return }
         isRecording = false
-
-        if config.provider == .whispercpp, config.enableStreaming {
-            stopStreamingHoldToTalk()
-            return
-        }
-
         statusItem.button?.title = "T"
 
         guard let audioURL = recorder.stop() else { return }
@@ -85,42 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let text = try await transcriber.transcribe(audioURL: audioURL)
                 TextInjector.paste(text: text)
-                statusItem.button?.toolTip = nil
             } catch {
                 statusItem.button?.title = "!"
             }
         }
-    }
-
-    private func startStreamingHoldToTalk() {
-        do {
-            let session = WhisperStreamSession(
-                streamPath: config.whisperStreamPath ?? "/opt/homebrew/bin/whisper-stream",
-                modelPath: config.model,
-                language: config.language ?? "en"
-            )
-            session.onUpdate = { [weak self] text in
-                Task { @MainActor [weak self] in
-                    self?.statusItem.button?.toolTip = text
-                }
-            }
-            try session.start()
-            streamSession = session
-            isRecording = true
-            statusItem.button?.title = "S"
-        } catch {
-            statusItem.button?.title = "!"
-            streamSession = nil
-            isRecording = false
-        }
-    }
-
-    private func stopStreamingHoldToTalk() {
-        statusItem.button?.title = "T"
-        let text = streamSession?.stop() ?? ""
-        streamSession = nil
-        statusItem.button?.toolTip = nil
-        TextInjector.paste(text: text)
     }
 
     @objc private func quit() {
