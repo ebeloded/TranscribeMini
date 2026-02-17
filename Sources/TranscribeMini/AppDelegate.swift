@@ -12,8 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isContinuousMode = false
     private var pendingHoldStart: DispatchWorkItem?
     private var lastTapAt: Date?
+    private var lastFnPressAt: Date?
+    private var recordingStartedAt: Date?
     private let holdStartDelay: TimeInterval = 0.22
     private let doubleTapWindow: TimeInterval = 0.35
+    private let minimumTranscriptionDurationSeconds: Double = 1.0
 
     override init() {
         let config = AppConfig.load()
@@ -60,9 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !isContinuousMode else { return }
         guard !isRecording else { return }
 
+        let pressAt = Date()
+        lastFnPressAt = pressAt
+        setStatusIcon(.recording)
+        tmLog("[TranscribeMini] Fn press detected; icon updated immediately")
+
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.pendingHoldStart = nil
+            if let pressAt = self.lastFnPressAt {
+                let elapsed = Date().timeIntervalSince(pressAt)
+                tmLog("[TranscribeMini] Hold delay elapsed in \(formatMs(elapsed)); starting recorder")
+            }
             self.startRecording()
         }
         pendingHoldStart = workItem
@@ -82,6 +94,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             if registerTapAndCheckDoubleTap() {
                 startContinuousRecording()
+            } else if !isRecording {
+                setStatusIcon(.idle)
+                tmLog("[TranscribeMini] Single Fn tap; returning to idle")
             }
             return
         }
@@ -101,7 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try recorder.start()
             isRecording = true
-            tmLog("[TranscribeMini] Recording started (continuous=\(isContinuousMode))")
+            let now = Date()
+            recordingStartedAt = now
+            if let pressAt = lastFnPressAt {
+                let delay = now.timeIntervalSince(pressAt)
+                tmLog("[TranscribeMini] Recording started (continuous=\(isContinuousMode), press->record=\(formatMs(delay)))")
+            } else {
+                tmLog("[TranscribeMini] Recording started (continuous=\(isContinuousMode))")
+            }
             setStatusIcon(.recording)
         } catch {
             tmLog("[TranscribeMini] Failed to start recording: \(error.localizedDescription)")
@@ -115,19 +137,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setStatusIcon(.transcribing)
         tmLog("[TranscribeMini] Recording stopped. Preparing transcription...")
 
+        if let recordingStartedAt {
+            let recordingDuration = Date().timeIntervalSince(recordingStartedAt)
+            tmLog("[TranscribeMini] Recording duration \(formatMs(recordingDuration))")
+        }
+        self.recordingStartedAt = nil
+
         guard let audioURL = recorder.stop() else {
             tmLog("[TranscribeMini] Recorder returned no audio URL")
             setStatusIcon(.error)
             return
         }
+
+        let duration = audioDurationSeconds(for: audioURL)
+        if duration < minimumTranscriptionDurationSeconds {
+            tmLog("[TranscribeMini] Ignoring short audio clip (\(duration)s)")
+            setStatusIcon(.idle)
+            return
+        }
+
+        let transcriptionStartedAt = Date()
         tmLog("[TranscribeMini] Transcription started for \(audioURL.path)")
         Task { @MainActor in
             do {
                 let text = try await transcriber.transcribe(audioURL: audioURL)
                 TextInjector.paste(text: text)
-                tmLog("[TranscribeMini] Transcription finished. chars=\(text.count)")
+                let elapsed = Date().timeIntervalSince(transcriptionStartedAt)
+                tmLog("[TranscribeMini] Transcription finished in \(formatMs(elapsed)). chars=\(text.count)")
                 setStatusIcon(.idle)
             } catch {
+                if error.localizedDescription.contains("shorter than")
+                    || error.localizedDescription.contains("minimum for this model") {
+                    tmLog("[TranscribeMini] Ignoring short audio error from API")
+                    setStatusIcon(.idle)
+                    return
+                }
                 tmLog("[TranscribeMini] Transcription failed: \(error.localizedDescription)")
                 setStatusIcon(.error)
             }
@@ -144,6 +188,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.lastTapAt = now
         return false
+    }
+
+    private func audioDurationSeconds(for url: URL) -> Double {
+        guard let audioFile = try? AVAudioFile(forReading: url) else {
+            return 0
+        }
+
+        let sampleRate = audioFile.processingFormat.sampleRate
+        guard sampleRate > 0 else { return 0 }
+
+        let duration = Double(audioFile.length) / sampleRate
+        return duration
+    }
+
+    private func formatMs(_ seconds: TimeInterval) -> String {
+        String(format: "%.0fms", seconds * 1000)
     }
 
     @objc private func quit() {
