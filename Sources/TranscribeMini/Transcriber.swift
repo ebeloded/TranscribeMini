@@ -112,6 +112,14 @@ final class OpenAICompatibleTranscriber: Transcriber {
     }
 
     func transcribe(audioURL: URL) async throws -> String {
+        guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw NSError(
+                domain: "OpenAICompatibleTranscriber",
+                code: 6,
+                userInfo: [NSLocalizedDescriptionKey: "Missing API key. Set TRANSCRIBE_API_KEY or OPENAI_API_KEY."]
+            )
+        }
+
         let boundary = "Boundary-\(UUID().uuidString)"
 
         var request = URLRequest(url: URL(string: endpoint)!)

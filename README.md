@@ -16,7 +16,6 @@ If you already have an OpenAI key in your shell env:
 
 ```bash
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
-export TRANSCRIBE_PROVIDER="openai"
 swift run
 ```
 
@@ -61,18 +60,7 @@ Supported environment variables:
 
 Optional file: `~/.transcribe-mini.json`.
 
-### Local Apple Speech (default)
-
-```json
-{
-  "provider": "apple",
-  "apiKey": "",
-  "model": "gpt-4o-mini-transcribe",
-  "language": "en-US"
-}
-```
-
-### OpenAI hosted transcription
+### OpenAI hosted transcription (default)
 
 ```json
 {
@@ -80,6 +68,17 @@ Optional file: `~/.transcribe-mini.json`.
   "apiKey": "YOUR_OPENAI_API_KEY",
   "model": "gpt-4o-mini-transcribe",
   "language": "en"
+}
+```
+
+### Local Apple Speech
+
+```json
+{
+  "provider": "apple",
+  "apiKey": "",
+  "model": "gpt-4o-mini-transcribe",
+  "language": "en-US"
 }
 ```
 
@@ -125,8 +124,6 @@ curl -L https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-
 
 export TRANSCRIBE_LOCAL_MODEL="$HOME/.transcribe-mini/models/ggml-large-v3-turbo-q5_0.bin"
 ```
-
-Run `swift run TranscribeBench` to compare transcription speed across providers and models.
 
 Quick local smoke test (without launching the app):
 

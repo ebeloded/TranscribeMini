@@ -8,10 +8,10 @@ final class AppConfigTests: XCTestCase {
 
         let config = AppConfig.load(from: tmpURL, env: [:])
 
-        XCTAssertEqual(config.provider, .apple)
+        XCTAssertEqual(config.provider, .openai)
         XCTAssertEqual(config.apiKey, "")
         XCTAssertEqual(config.model, "gpt-4o-mini-transcribe")
-        XCTAssertEqual(config.language, "en-US")
+        XCTAssertEqual(config.language, "en")
         XCTAssertNil(config.whisperCLIPath)
         XCTAssertNil(config.whisperServerPath)
         XCTAssertEqual(config.whisperServerHost, "127.0.0.1")

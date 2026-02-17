@@ -1,12 +1,11 @@
 import AppKit
 import AVFoundation
-import Carbon.HIToolbox
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let recorder = HoldToTalkRecorder()
-    private var hotkeyManager: HotkeyManager?
+    private var fnKeyMonitor: FnKeyHoldMonitor?
     private let config: AppConfig
     private var transcriber: any Transcriber
     private var isRecording = false
@@ -28,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setStatusIcon(.idle)
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Hold Option+Shift+D to Talk", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Hold Fn to Talk", action: nil, keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
 
@@ -36,19 +35,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupHotkey() {
-        hotkeyManager = HotkeyManager(
-            keyCode: UInt32(kVK_ANSI_D),
-            modifiers: UInt32(optionKey | shiftKey)
-        )
-        hotkeyManager?.onPress = { [weak self] in
+        fnKeyMonitor = FnKeyHoldMonitor()
+        fnKeyMonitor?.onPress = { [weak self] in
             guard let self else { return }
             self.startHoldToTalk()
         }
-        hotkeyManager?.onRelease = { [weak self] in
+        fnKeyMonitor?.onRelease = { [weak self] in
             guard let self else { return }
             self.stopHoldToTalk()
         }
-        hotkeyManager?.start()
+        fnKeyMonitor?.start()
     }
 
     private func startHoldToTalk() {
@@ -65,13 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopHoldToTalk() {
         guard isRecording else { return }
         isRecording = false
-        setStatusIcon(.idle)
+        setStatusIcon(.transcribing)
 
         guard let audioURL = recorder.stop() else { return }
         Task { @MainActor in
             do {
                 let text = try await transcriber.transcribe(audioURL: audioURL)
                 TextInjector.paste(text: text)
+                setStatusIcon(.idle)
             } catch {
                 setStatusIcon(.error)
             }
@@ -93,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private enum IconState {
         case idle
         case recording
+        case transcribing
         case error
     }
 
@@ -102,25 +100,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let symbolName: String
         switch state {
         case .idle:
-            symbolName = "waveform"
+            symbolName = "mic"
         case .recording:
-            symbolName = "waveform.circle.fill"
+            symbolName = "mic.fill"
+        case .transcribing:
+            symbolName = "mic"
         case .error:
             symbolName = "exclamationmark.triangle.fill"
         }
 
         let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TranscribeMini")
-        image?.isTemplate = false
+        image?.isTemplate = true
         button.image = image
         button.title = ""
-
-        switch state {
-        case .idle:
-            button.contentTintColor = .labelColor
-        case .recording:
-            button.contentTintColor = .systemRed
-        case .error:
-            button.contentTintColor = .systemOrange
-        }
+        button.contentTintColor = nil
     }
 }

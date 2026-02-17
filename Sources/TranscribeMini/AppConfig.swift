@@ -39,11 +39,11 @@ struct AppConfig: Decodable {
             .appendingPathComponent(".transcribe-mini.json")
 
         var merged = AppConfig(
-            provider: .apple,
+            provider: .openai,
             apiKey: "",
             model: "gpt-4o-mini-transcribe",
             endpoint: nil,
-            language: "en-US",
+            language: "en",
             whisperCLIPath: nil,
             whisperServerPath: nil,
             whisperServerHost: "127.0.0.1",
