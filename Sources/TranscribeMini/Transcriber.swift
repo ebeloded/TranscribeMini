@@ -6,6 +6,11 @@ protocol Transcriber {
     func transcribe(audioURL: URL) async throws -> String
 }
 
+protocol InMemoryAudioTranscriber {
+    @MainActor
+    func transcribe(audioData: Data, mimeType: String, filename: String) async throws -> String
+}
+
 enum TranscriberFactory {
     static func make(config: AppConfig) -> any Transcriber {
         switch config.provider {
@@ -112,6 +117,18 @@ final class OpenAICompatibleTranscriber: Transcriber {
     }
 
     func transcribe(audioURL: URL) async throws -> String {
+        let audioData = try Data(contentsOf: audioURL)
+        let mimeType = mimeTypeForAudioFile(url: audioURL)
+        return try await transcribe(
+            audioData: audioData,
+            mimeType: mimeType,
+            filename: audioURL.lastPathComponent
+        )
+    }
+}
+
+extension OpenAICompatibleTranscriber: InMemoryAudioTranscriber {
+    func transcribe(audioData: Data, mimeType: String, filename: String) async throws -> String {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw NSError(
                 domain: "OpenAICompatibleTranscriber",
@@ -127,13 +144,11 @@ final class OpenAICompatibleTranscriber: Transcriber {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let audioData = try Data(contentsOf: audioURL)
-        let mimeType = mimeTypeForAudioFile(url: audioURL)
         let body = MultipartFormBuilder.makeTranscriptionBody(
             boundary: boundary,
             model: model,
             language: language,
-            filename: audioURL.lastPathComponent,
+            filename: filename,
             audioData: audioData,
             mimeType: mimeType
         )
@@ -217,6 +232,18 @@ final class WhisperServerTranscriber: Transcriber {
     }
 
     func transcribe(audioURL: URL) async throws -> String {
+        let audioData = try Data(contentsOf: audioURL)
+        let mimeType = mimeTypeForAudioFile(url: audioURL)
+        return try await transcribe(
+            audioData: audioData,
+            mimeType: mimeType,
+            filename: audioURL.lastPathComponent
+        )
+    }
+}
+
+extension WhisperServerTranscriber: InMemoryAudioTranscriber {
+    func transcribe(audioData: Data, mimeType: String, filename: String) async throws -> String {
         guard let url = URL(string: endpoint), let host = url.host, let port = url.port else {
             throw NSError(domain: "WhisperServerTranscriber", code: 30, userInfo: [
                 NSLocalizedDescriptionKey: "Invalid whisper-server endpoint"
@@ -235,12 +262,10 @@ final class WhisperServerTranscriber: Transcriber {
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
-        let audioData = try Data(contentsOf: audioURL)
-        let mimeType = mimeTypeForAudioFile(url: audioURL)
         let body = MultipartFormBuilder.makeWhisperServerBody(
             boundary: boundary,
             language: language,
-            filename: audioURL.lastPathComponent,
+            filename: filename,
             audioData: audioData,
             mimeType: mimeType
         )

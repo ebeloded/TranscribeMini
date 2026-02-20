@@ -156,4 +156,5 @@ Optional override:
   - Red waveform with magnifier: transcribing
   - Orange warning triangle: last action failed
 - Default hold key is hardcoded to `Fn`.
-- Audio is recorded as `.wav` to support local whisper.cpp directly.
+- Audio is captured as 16kHz mono PCM and packaged as in-memory `.wav` for OpenAI-compatible uploads (no temp file required for upload).
+- Final recordings are persisted to `~/.transcribe-mini/recordings/`.

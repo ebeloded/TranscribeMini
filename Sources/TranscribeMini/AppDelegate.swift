@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let holdStartDelay: TimeInterval = 0.22
     private let doubleTapWindow: TimeInterval = 0.35
     private let minimumTranscriptionDurationSeconds: Double = 1.0
+    private let recordingsDirectory = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".transcribe-mini")
+        .appendingPathComponent("recordings", isDirectory: true)
 
     override init() {
         let config = AppConfig.load()
@@ -143,25 +146,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.recordingStartedAt = nil
 
-        guard let audioURL = recorder.stop() else {
-            tmLog("[TranscribeMini] Recorder returned no audio URL")
+        guard let audio = recorder.stop() else {
+            tmLog("[TranscribeMini] Recorder returned no audio")
             setStatusIcon(.error)
             return
         }
 
-        let duration = audioDurationSeconds(for: audioURL)
-        if duration < minimumTranscriptionDurationSeconds {
-            tmLog("[TranscribeMini] Ignoring short audio clip (\(duration)s)")
+        if audio.durationSeconds < minimumTranscriptionDurationSeconds {
+            tmLog("[TranscribeMini] Ignoring short audio clip (\(audio.durationSeconds)s)")
             setStatusIcon(.idle)
             return
         }
 
         let transcriptionStartedAt = Date()
-        tmLog("[TranscribeMini] Transcription started for \(audioURL.path)")
+        tmLog("[TranscribeMini] Transcription started for in-memory audio (\(audio.data.count) bytes)")
         Task { @MainActor in
             do {
-                let text = try await transcriber.transcribe(audioURL: audioURL)
-                TextInjector.paste(text: text)
+                let persistedURL = try persistRecording(data: audio.data, suggestedFilename: audio.suggestedFilename)
+                tmLog("[TranscribeMini] Recording saved to \(persistedURL.path)")
+
+                let text: String
+                if let inMemoryTranscriber = transcriber as? any InMemoryAudioTranscriber {
+                    text = try await inMemoryTranscriber.transcribe(
+                        audioData: audio.data,
+                        mimeType: audio.mimeType,
+                        filename: audio.suggestedFilename
+                    )
+                } else {
+                    let tempURL = try writeTemporaryAudioFile(data: audio.data, filename: audio.suggestedFilename)
+                    defer { try? FileManager.default.removeItem(at: tempURL) }
+                    text = try await transcriber.transcribe(audioURL: tempURL)
+                }
+                if let sanitizedText = TranscriptSanitizer.sanitizeForPaste(text) {
+                    TextInjector.paste(text: sanitizedText)
+                } else {
+                    tmLog("[TranscribeMini] Skipping paste for placeholder/empty transcript")
+                }
                 let elapsed = Date().timeIntervalSince(transcriptionStartedAt)
                 tmLog("[TranscribeMini] Transcription finished in \(formatMs(elapsed)). chars=\(text.count)")
                 setStatusIcon(.idle)
@@ -190,16 +210,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    private func audioDurationSeconds(for url: URL) -> Double {
-        guard let audioFile = try? AVAudioFile(forReading: url) else {
-            return 0
-        }
+    private func writeTemporaryAudioFile(data: Data, filename: String) throws -> URL {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(filename)
+        try data.write(to: url, options: .atomic)
+        return url
+    }
 
-        let sampleRate = audioFile.processingFormat.sampleRate
-        guard sampleRate > 0 else { return 0 }
+    private func persistRecording(data: Data, suggestedFilename: String) throws -> URL {
+        try FileManager.default.createDirectory(
+            at: recordingsDirectory,
+            withIntermediateDirectories: true
+        )
 
-        let duration = Double(audioFile.length) / sampleRate
-        return duration
+        let timestamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let filename = "\(timestamp)-\(suggestedFilename)"
+        let url = recordingsDirectory.appendingPathComponent(filename)
+        try data.write(to: url, options: .atomic)
+        return url
     }
 
     private func formatMs(_ seconds: TimeInterval) -> String {
