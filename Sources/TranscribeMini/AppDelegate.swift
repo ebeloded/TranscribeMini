@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let endpoint = config.endpoint ?? config.provider.defaultEndpoint
         let profile = config.activeProfileName ?? "legacy/default"
         tmLog("[TranscribeMini] Launching with profile=\(profile) provider=\(config.provider.rawValue) model=\(config.model) endpoint=\(endpoint)")
+        TextInjector.requestAccessibilityIfNeeded()
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             tmLog("[TranscribeMini] Microphone access granted=\(granted)")
         }
