@@ -347,8 +347,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             symbolName = "exclamationmark.triangle.fill"
         }
 
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TranscribeMini")
-        image?.isTemplate = true
+        let image: NSImage?
+        switch state {
+        case .recording:
+            let config = NSImage.SymbolConfiguration(paletteColors: [.systemOrange])
+            image = NSImage(
+                systemSymbolName: symbolName,
+                accessibilityDescription: "TranscribeMini"
+            )?.withSymbolConfiguration(config)
+            image?.isTemplate = false
+        default:
+            image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "TranscribeMini")
+            image?.isTemplate = true
+        }
         button.image = image
         button.title = ""
         button.contentTintColor = nil
