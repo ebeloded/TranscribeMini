@@ -12,7 +12,10 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "TranscribeMini"
+            name: "TranscribeMini",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "TranscribeMiniTests",

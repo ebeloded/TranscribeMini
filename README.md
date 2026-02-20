@@ -5,6 +5,7 @@ A minimal macOS hold-to-talk transcription app.
 Interaction:
 - Hold `Fn`: recording starts immediately.
 - Release `Fn`: recording stops, audio is transcribed, text is pasted at your cursor.
+- Cue sounds: start cue plays on `Fn` press; stop cue plays when recording ends.
 
 ## Run
 
@@ -41,12 +42,16 @@ Important when using `swift run`:
 
 Config is loaded in this order:
 1. Defaults
-2. `~/.transcribe-mini.json` (optional)
+2. `~/.transcribe-mini/config.json` (optional)
 3. Environment variables (override file/defaults)
 
 Supported environment variables:
+- `TRANSCRIBE_PROFILE` (profile name from `profiles` map)
 - `TRANSCRIBE_PROVIDER` (`apple`, `openai`, `groq`, `whispercpp`)
-- `TRANSCRIBE_API_KEY` (or `OPENAI_API_KEY` / `GROQ_API_KEY`)
+- `TRANSCRIBE_API_KEY` (global override)
+- `TRANSCRIBE_OPENAI_API_KEY` (OpenAI profile key)
+- `TRANSCRIBE_GROQ_API_KEY` (Groq profile key)
+- `OPENAI_API_KEY` / `GROQ_API_KEY` (fallback provider keys)
 - `TRANSCRIBE_MODEL`
 - `TRANSCRIBE_ENDPOINT`
 - `TRANSCRIBE_LANGUAGE`
@@ -58,42 +63,65 @@ Supported environment variables:
 - `WHISPER_SERVER_PORT` (default: `8178`)
 - `WHISPER_SERVER_INFERENCE_PATH` (default: `/inference`)
 
-Optional file: `~/.transcribe-mini.json`.
+Optional file: `~/.transcribe-mini/config.json`.
 
-### OpenAI hosted transcription (default)
-
-```json
-{
-  "provider": "openai",
-  "apiKey": "YOUR_OPENAI_API_KEY",
-  "model": "gpt-4o-mini-transcribe",
-  "language": "en"
-}
-```
-
-### Local Apple Speech
+### Profile-based config (recommended)
 
 ```json
 {
-  "provider": "apple",
-  "apiKey": "",
-  "model": "gpt-4o-mini-transcribe",
-  "language": "en-US"
+  "defaultProfile": "openai",
+  "profiles": {
+    "openai": {
+      "provider": "openai",
+      "model": "gpt-4o-mini-transcribe",
+      "language": "en"
+    },
+    "apple": {
+      "provider": "apple",
+      "language": "en-US"
+    },
+    "groq": {
+      "provider": "groq",
+      "model": "whisper-large-v3",
+      "language": "en"
+    },
+    "whispercpp": {
+      "provider": "whispercpp",
+      "model": "/Users/you/.transcribe-mini/models/ggml-base.en.bin",
+      "language": "en",
+      "useWhisperServer": true,
+      "whisperServerPath": "/opt/homebrew/bin/whisper-server",
+      "whisperCLIPath": "/opt/homebrew/bin/whisper-cli"
+    }
+  }
 }
 ```
 
-### Groq OpenAI-compatible endpoint
+Set API keys via environment:
 
-```json
-{
-  "provider": "groq",
-  "apiKey": "YOUR_GROQ_API_KEY",
-  "model": "whisper-large-v3",
-  "language": "en"
-}
+```bash
+export TRANSCRIBE_OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
+export TRANSCRIBE_GROQ_API_KEY="YOUR_GROQ_API_KEY"
 ```
 
-### Local whisper.cpp (on-device)
+Profile selection order:
+1. `TRANSCRIBE_PROFILE`
+2. `defaultProfile`
+3. First profile key in sorted order (deterministic fallback)
+
+Switch profile at runtime without editing JSON:
+
+```bash
+TRANSCRIBE_PROFILE=apple swift run
+```
+
+```bash
+TRANSCRIBE_PROFILE=groq GROQ_API_KEY="YOUR_GROQ_API_KEY" swift run
+```
+
+You can also switch profiles from the menu bar icon under `Profiles`. The selected profile is remembered for next launch.
+
+### Local whisper.cpp setup example
 
 ```bash
 brew install whisper-cpp
@@ -148,6 +176,26 @@ Optional override:
 }
 ```
 
+## Integration Tests (OpenAI/Groq)
+
+Integration tests are opt-in and skipped by default. They make real API calls.
+
+Run with OpenAI:
+
+```bash
+RUN_INTEGRATION_TESTS=1 \
+TRANSCRIBE_OPENAI_API_KEY="YOUR_OPENAI_API_KEY" \
+swift test --filter OpenAICompatibleIntegrationTests/testOpenAITranscriptionIntegration
+```
+
+Run with Groq:
+
+```bash
+RUN_INTEGRATION_TESTS=1 \
+TRANSCRIBE_GROQ_API_KEY="YOUR_GROQ_API_KEY" \
+swift test --filter OpenAICompatibleIntegrationTests/testGroqTranscriptionIntegration
+```
+
 ## Notes
 
 - Menubar icon states:
@@ -156,5 +204,6 @@ Optional override:
   - Red waveform with magnifier: transcribing
   - Orange warning triangle: last action failed
 - Default hold key is hardcoded to `Fn`.
+- Recording cues use bundled `dictation-start.wav` and `dictation-stop.wav`.
 - Audio is captured as 16kHz mono PCM and packaged as in-memory `.wav` for OpenAI-compatible uploads (no temp file required for upload).
 - Final recordings are persisted to `~/.transcribe-mini/recordings/`.

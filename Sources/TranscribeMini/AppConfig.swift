@@ -30,13 +30,13 @@ struct AppConfig: Decodable {
     var whisperServerPort: Int
     var whisperServerInferencePath: String
     var useWhisperServer: Bool
+    var activeProfileName: String? = nil
 
     static func load(
         from configURL: URL? = nil,
         env: [String: String] = ProcessInfo.processInfo.environment
     ) -> AppConfig {
-        let url = configURL ?? FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".transcribe-mini.json")
+        let url = configURL ?? defaultConfigURL
 
         var merged = AppConfig(
             provider: .openai,
@@ -49,44 +49,47 @@ struct AppConfig: Decodable {
             whisperServerHost: "127.0.0.1",
             whisperServerPort: 8178,
             whisperServerInferencePath: "/inference",
-            useWhisperServer: true
+            useWhisperServer: true,
+            activeProfileName: nil
         )
 
-        if let data = try? Data(contentsOf: url),
-           let fileConfig = try? JSONDecoder().decode(FileConfig.self, from: data) {
-            if let provider = fileConfig.provider {
-                merged.provider = provider
-            }
-            if let apiKey = fileConfig.apiKey {
-                merged.apiKey = apiKey
-            }
-            if let model = fileConfig.model {
-                merged.model = model
-            }
-            if let endpoint = fileConfig.endpoint {
-                merged.endpoint = endpoint
-            }
-            if let language = fileConfig.language {
-                merged.language = language
-            }
-            if let whisperCLIPath = fileConfig.whisperCLIPath {
-                merged.whisperCLIPath = whisperCLIPath
-            }
-            if let whisperServerPath = fileConfig.whisperServerPath {
-                merged.whisperServerPath = whisperServerPath
-            }
-            if let whisperServerHost = fileConfig.whisperServerHost, !whisperServerHost.isEmpty {
-                merged.whisperServerHost = whisperServerHost
-            }
-            if let whisperServerPort = fileConfig.whisperServerPort {
-                merged.whisperServerPort = whisperServerPort
-            }
-            if let whisperServerInferencePath = fileConfig.whisperServerInferencePath,
-               !whisperServerInferencePath.isEmpty {
-                merged.whisperServerInferencePath = whisperServerInferencePath
-            }
-            if let useWhisperServer = fileConfig.useWhisperServer {
-                merged.useWhisperServer = useWhisperServer
+        if let data = try? Data(contentsOf: url) {
+            let decoder = JSONDecoder()
+            if let profilesConfig = try? decoder.decode(ProfilesFileConfig.self, from: data),
+               let profiles = profilesConfig.profiles,
+               !profiles.isEmpty {
+                let requestedProfile = env["TRANSCRIBE_PROFILE"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let requestedProfileName = requestedProfile?.isEmpty == false ? requestedProfile : nil
+                let sortedProfileNames = profiles.keys.sorted()
+
+                var selectedProfileName: String?
+
+                if let requestedProfileName {
+                    if profiles[requestedProfileName] != nil {
+                        selectedProfileName = requestedProfileName
+                    } else {
+                        tmLog("[TranscribeMini] Warning: TRANSCRIBE_PROFILE='\(requestedProfileName)' not found. Falling back.")
+                    }
+                }
+
+                if selectedProfileName == nil, let defaultProfile = profilesConfig.defaultProfile {
+                    if profiles[defaultProfile] != nil {
+                        selectedProfileName = defaultProfile
+                    } else {
+                        tmLog("[TranscribeMini] Warning: defaultProfile='\(defaultProfile)' not found. Falling back.")
+                    }
+                }
+
+                if selectedProfileName == nil {
+                    selectedProfileName = sortedProfileNames.first
+                }
+
+                if let selectedProfileName, let selectedProfile = profiles[selectedProfileName] {
+                    merged.apply(profile: selectedProfile)
+                    merged.activeProfileName = selectedProfileName
+                }
+            } else {
+                tmLog("[TranscribeMini] Warning: Config file must include non-empty 'profiles'. Using defaults/env only.")
             }
         }
 
@@ -126,8 +129,21 @@ struct AppConfig: Decodable {
             merged.model = localModelPath
         }
 
+        let providerScopedAPIKey: String?
+        switch merged.provider {
+        case .openai:
+            providerScopedAPIKey = env["TRANSCRIBE_OPENAI_API_KEY"] ?? env["OPENAI_API_KEY"]
+        case .groq:
+            providerScopedAPIKey = env["TRANSCRIBE_GROQ_API_KEY"] ?? env["GROQ_API_KEY"]
+        case .apple, .whispercpp:
+            providerScopedAPIKey = nil
+        }
+
         let envAPIKey = env["TRANSCRIBE_API_KEY"]
+            ?? providerScopedAPIKey
+            ?? env["TRANSCRIBE_OPENAI_API_KEY"]
             ?? env["OPENAI_API_KEY"]
+            ?? env["TRANSCRIBE_GROQ_API_KEY"]
             ?? env["GROQ_API_KEY"]
         if let envAPIKey, !envAPIKey.isEmpty {
             merged.apiKey = envAPIKey
@@ -135,9 +151,30 @@ struct AppConfig: Decodable {
 
         return merged
     }
+
+    static var defaultConfigURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".transcribe-mini")
+            .appendingPathComponent("config.json")
+    }
+
+    static func availableProfiles(from configURL: URL? = nil) -> [String] {
+        let url = configURL ?? defaultConfigURL
+        guard let data = try? Data(contentsOf: url),
+              let profilesConfig = try? JSONDecoder().decode(ProfilesFileConfig.self, from: data),
+              let profiles = profilesConfig.profiles else {
+            return []
+        }
+        return profiles.keys.sorted()
+    }
 }
 
-private struct FileConfig: Decodable {
+private struct ProfilesFileConfig: Decodable {
+    let defaultProfile: String?
+    let profiles: [String: ProfileConfig]?
+}
+
+private struct ProfileConfig: Decodable {
     let provider: Provider?
     let apiKey: String?
     let model: String?
@@ -149,4 +186,43 @@ private struct FileConfig: Decodable {
     let whisperServerPort: Int?
     let whisperServerInferencePath: String?
     let useWhisperServer: Bool?
+}
+
+private extension AppConfig {
+    mutating func apply(profile: ProfileConfig) {
+        if let provider = profile.provider {
+            self.provider = provider
+        }
+        if let apiKey = profile.apiKey {
+            self.apiKey = apiKey
+        }
+        if let model = profile.model {
+            self.model = model
+        }
+        if let endpoint = profile.endpoint {
+            self.endpoint = endpoint
+        }
+        if let language = profile.language {
+            self.language = language
+        }
+        if let whisperCLIPath = profile.whisperCLIPath {
+            self.whisperCLIPath = whisperCLIPath
+        }
+        if let whisperServerPath = profile.whisperServerPath {
+            self.whisperServerPath = whisperServerPath
+        }
+        if let whisperServerHost = profile.whisperServerHost, !whisperServerHost.isEmpty {
+            self.whisperServerHost = whisperServerHost
+        }
+        if let whisperServerPort = profile.whisperServerPort {
+            self.whisperServerPort = whisperServerPort
+        }
+        if let whisperServerInferencePath = profile.whisperServerInferencePath,
+           !whisperServerInferencePath.isEmpty {
+            self.whisperServerInferencePath = whisperServerInferencePath
+        }
+        if let useWhisperServer = profile.useWhisperServer {
+            self.useWhisperServer = useWhisperServer
+        }
+    }
 }

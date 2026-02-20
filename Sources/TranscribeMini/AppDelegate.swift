@@ -4,9 +4,13 @@ import AVFoundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let menu = NSMenu()
     private let recorder = HoldToTalkRecorder()
+    private let recordingCuePlayer = RecordingCuePlayer()
     private var fnKeyMonitor: FnKeyHoldMonitor?
-    private let config: AppConfig
+    private let processEnv: [String: String]
+    private var selectedProfileOverride: String?
+    private var config: AppConfig
     private var transcriber: any Transcriber
     private var isRecording = false
     private var isContinuousMode = false
@@ -17,12 +21,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let holdStartDelay: TimeInterval = 0.22
     private let doubleTapWindow: TimeInterval = 0.35
     private let minimumTranscriptionDurationSeconds: Double = 1.0
+    private static let profileOverrideDefaultsKey = "transcribe.selectedProfileOverride"
     private let recordingsDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".transcribe-mini")
         .appendingPathComponent("recordings", isDirectory: true)
 
     override init() {
-        let config = AppConfig.load()
+        let processEnv = ProcessInfo.processInfo.environment
+        let savedOverride = UserDefaults.standard.string(forKey: Self.profileOverrideDefaultsKey)
+        let env = Self.envWithProfileOverride(
+            base: processEnv,
+            profileOverride: savedOverride,
+            force: false
+        )
+        let config = AppConfig.load(env: env)
+        self.processEnv = processEnv
+        self.selectedProfileOverride = savedOverride
         self.config = config
         self.transcriber = TranscriberFactory.make(config: config)
         super.init()
@@ -30,7 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let endpoint = config.endpoint ?? config.provider.defaultEndpoint
-        tmLog("[TranscribeMini] Launching with provider=\(config.provider.rawValue) model=\(config.model) endpoint=\(endpoint)")
+        let profile = config.activeProfileName ?? "legacy/default"
+        tmLog("[TranscribeMini] Launching with profile=\(profile) provider=\(config.provider.rawValue) model=\(config.model) endpoint=\(endpoint)")
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             tmLog("[TranscribeMini] Microphone access granted=\(granted)")
         }
@@ -40,13 +55,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureMenuBar() {
         setStatusIcon(.idle)
-
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Hold Fn to Talk • Double-tap Fn for Continuous", action: nil, keyEquivalent: ""))
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q"))
-
         statusItem.menu = menu
+        rebuildMenu()
+    }
+
+    private func rebuildMenu() {
+        menu.removeAllItems()
+        menu.addItem(NSMenuItem(title: "Hold Fn to Talk • Double-tap Fn for Continuous", action: nil, keyEquivalent: ""))
+
+        let profiles = AppConfig.availableProfiles()
+        if !profiles.isEmpty {
+            menu.addItem(.separator())
+            menu.addItem(NSMenuItem(title: "Profiles", action: nil, keyEquivalent: ""))
+
+            for profile in profiles {
+                let item = NSMenuItem(title: profile, action: #selector(selectProfile(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = profile
+                item.state = profile == config.activeProfileName ? .on : .off
+                menu.addItem(item)
+            }
+        }
+
+        menu.addItem(.separator())
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+    }
+
+    @objc private func selectProfile(_ sender: NSMenuItem) {
+        guard let profile = sender.representedObject as? String else { return }
+        switchProfile(to: profile)
+    }
+
+    private func switchProfile(to profile: String) {
+        let previousConfig = config
+        selectedProfileOverride = profile
+        UserDefaults.standard.set(profile, forKey: Self.profileOverrideDefaultsKey)
+
+        let env = Self.envWithProfileOverride(
+            base: processEnv,
+            profileOverride: profile,
+            force: true
+        )
+        let updatedConfig = AppConfig.load(env: env)
+        config = updatedConfig
+        transcriber = TranscriberFactory.make(config: updatedConfig)
+
+        if previousConfig.provider == .whispercpp, previousConfig.useWhisperServer {
+            Task {
+                await WhisperServerManager.shared.stop()
+            }
+        }
+
+        let endpoint = updatedConfig.endpoint ?? updatedConfig.provider.defaultEndpoint
+        let activeProfile = updatedConfig.activeProfileName ?? "legacy/default"
+        tmLog("[TranscribeMini] Switched to profile=\(activeProfile) provider=\(updatedConfig.provider.rawValue) model=\(updatedConfig.model) endpoint=\(endpoint)")
+        rebuildMenu()
+    }
+
+    private static func envWithProfileOverride(
+        base: [String: String],
+        profileOverride: String?,
+        force: Bool
+    ) -> [String: String] {
+        var env = base
+        if let profileOverride, !profileOverride.isEmpty, (force || env["TRANSCRIBE_PROFILE"] == nil) {
+            env["TRANSCRIBE_PROFILE"] = profileOverride
+        }
+        return env
     }
 
     private func setupHotkey() {
@@ -69,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pressAt = Date()
         lastFnPressAt = pressAt
         setStatusIcon(.recording)
+        recordingCuePlayer.playStartCue()
         tmLog("[TranscribeMini] Fn press detected; icon updated immediately")
 
         let workItem = DispatchWorkItem { [weak self] in
@@ -137,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func stopAndTranscribe() {
         guard isRecording else { return }
         isRecording = false
+        recordingCuePlayer.playStopCue()
         setStatusIcon(.transcribing)
         tmLog("[TranscribeMini] Recording stopped. Preparing transcription...")
 
