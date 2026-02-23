@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingStartedAt: Date?
     private let holdStartDelay: TimeInterval = 0.22
     private let doubleTapWindow: TimeInterval = 0.35
-    private let minimumTranscriptionDurationSeconds: Double = 1.0
+    private let minimumTranscriptionDurationSeconds: Double = 0.2
     private static let profileOverrideDefaultsKey = "transcribe.selectedProfileOverride"
     private let recordingsDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".transcribe-mini")
