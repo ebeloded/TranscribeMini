@@ -42,7 +42,7 @@ Important when using `swift run`:
 
 Config is loaded in this order:
 1. Defaults
-2. `~/.transcribe-mini/config.json` (optional)
+2. `~/.config/transcribe-mini/config.json` (auto-created if missing)
 3. Environment variables (override file/defaults)
 
 Supported environment variables:
@@ -63,7 +63,7 @@ Supported environment variables:
 - `WHISPER_SERVER_PORT` (default: `8178`)
 - `WHISPER_SERVER_INFERENCE_PATH` (default: `/inference`)
 
-Optional file: `~/.transcribe-mini/config.json`.
+Config file: `~/.config/transcribe-mini/config.json`.
 
 ### Profile-based config (recommended)
 

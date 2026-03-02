@@ -36,7 +36,12 @@ struct AppConfig: Decodable {
         from configURL: URL? = nil,
         env: [String: String] = ProcessInfo.processInfo.environment
     ) -> AppConfig {
+        let isDefaultPath = configURL == nil
         let url = configURL ?? defaultConfigURL
+        if isDefaultPath {
+            migrateLegacyConfigIfNeeded()
+            ensureConfigExists(at: url)
+        }
 
         var merged = AppConfig(
             provider: .openai,
@@ -154,7 +159,8 @@ struct AppConfig: Decodable {
 
     static var defaultConfigURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".transcribe-mini")
+            .appendingPathComponent(".config")
+            .appendingPathComponent("transcribe-mini")
             .appendingPathComponent("config.json")
     }
 
@@ -166,6 +172,58 @@ struct AppConfig: Decodable {
             return []
         }
         return profiles.keys.sorted()
+    }
+
+    private static var legacyConfigURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".transcribe-mini")
+            .appendingPathComponent("config.json")
+    }
+
+    private static func migrateLegacyConfigIfNeeded() {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: defaultConfigURL.path),
+              fm.fileExists(atPath: legacyConfigURL.path) else {
+            return
+        }
+
+        let parent = defaultConfigURL.deletingLastPathComponent()
+        do {
+            try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+            try fm.moveItem(at: legacyConfigURL, to: defaultConfigURL)
+            tmLog("[TranscribeMini] Migrated config to \(defaultConfigURL.path)")
+        } catch {
+            tmLog("[TranscribeMini] Warning: Failed to migrate legacy config: \(error.localizedDescription)")
+        }
+    }
+
+    private static func ensureConfigExists(at url: URL) {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: url.path) else {
+            return
+        }
+
+        let parent = url.deletingLastPathComponent()
+        let defaultConfig = """
+        {
+          "defaultProfile": "openai",
+          "profiles": {
+            "openai": {
+              "provider": "openai",
+              "model": "gpt-4o-mini-transcribe",
+              "language": "en"
+            }
+          }
+        }
+        """
+
+        do {
+            try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+            try defaultConfig.write(to: url, atomically: true, encoding: .utf8)
+            tmLog("[TranscribeMini] Created default config at \(url.path)")
+        } catch {
+            tmLog("[TranscribeMini] Warning: Failed to create default config: \(error.localizedDescription)")
+        }
     }
 }
 
