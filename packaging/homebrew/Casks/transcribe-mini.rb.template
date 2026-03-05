@@ -1,0 +1,20 @@
+cask "transcribe-mini" do
+  version "__VERSION__"
+  sha256 "__SHA256__"
+
+  url "__URL__"
+  name "TranscribeMini"
+  desc "Hold-to-talk menubar transcription app for macOS"
+  homepage "https://github.com/ebeloded/transcribe"
+
+  depends_on macos: ">= :ventura"
+
+  app "TranscribeMini.app"
+
+  zap trash: [
+    "~/Library/Application Support/TranscribeMini",
+    "~/.config/transcribe-mini",
+    "~/.transcribe-mini",
+    "~/Library/Preferences/com.transcribemini.app.plist",
+  ]
+end

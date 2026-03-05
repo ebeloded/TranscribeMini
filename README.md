@@ -176,6 +176,76 @@ Optional override:
 }
 ```
 
+## Distribution (Signed .app + Homebrew Cask)
+
+This project now includes scripts to build a proper `.app` bundle, notarize it, and generate a cask file.
+
+Prerequisites:
+- Apple Developer membership
+- A `Developer ID Application` certificate in Keychain
+- Xcode command line tools (`xcode-select --install`)
+- `notarytool` credentials:
+  - Recommended: saved keychain profile
+  - Or: `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`
+
+### 1) Build app bundle
+
+```bash
+scripts/build-app-bundle.sh
+```
+
+Output: `dist/TranscribeMini.app`
+
+Optional environment variables:
+- `APP_BUNDLE_ID` (default: `com.transcribemini.app`)
+- `APP_VERSION` (default: latest git tag without `v`, fallback `0.1.0`)
+- `BUILD_NUMBER` (default: UTC timestamp)
+- `OUTPUT_DIR` (default: `dist`)
+
+### 2) Sign + notarize app
+
+Using keychain profile:
+
+```bash
+NOTARY_KEYCHAIN_PROFILE="notary-profile" \
+scripts/sign-and-notarize-app.sh
+```
+
+Using Apple ID credentials:
+
+```bash
+APPLE_ID="you@example.com" \
+APPLE_APP_PASSWORD="app-specific-password" \
+APPLE_TEAM_ID="TEAMID1234" \
+scripts/sign-and-notarize-app.sh
+```
+
+Output:
+- `dist/TranscribeMini.zip` (notarized upload artifact)
+- Printed SHA256 for Homebrew cask
+
+### 3) Generate cask file
+
+```bash
+VERSION="0.1.0" \
+SHA256="<sha256-from-step-2>" \
+URL="https://github.com/ebeloded/transcribe/releases/download/v0.1.0/TranscribeMini.zip" \
+scripts/render-homebrew-cask.sh
+```
+
+Output: `dist/transcribe-mini.rb` generated from:
+- `packaging/homebrew/Casks/transcribe-mini.rb.template`
+
+Then publish:
+1. Upload `dist/TranscribeMini.zip` to a GitHub Release.
+2. Commit generated cask file to your tap repo under `Casks/transcribe-mini.rb`.
+3. Users install with:
+
+```bash
+brew tap <your-org>/<your-tap>
+brew install --cask transcribe-mini
+```
+
 ## Integration Tests (OpenAI/Groq)
 
 Integration tests are opt-in and skipped by default. They make real API calls.
